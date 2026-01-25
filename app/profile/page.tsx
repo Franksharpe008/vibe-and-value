@@ -14,7 +14,7 @@ import {
   BellIcon,
   ShieldCheckIcon,
   QuestionMarkCircleIcon,
-  ArrowArrowTrendingDownIcon,
+  ArrowTrendingDownIcon,
   TrophyIcon,
   HeartIcon,
 } from "@heroicons/react/24/outline";
