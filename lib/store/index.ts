@@ -50,11 +50,11 @@ export const useUserStore = create<UserState>((set, get) => ({
       profile: { ...state.profile, ...updates },
     })),
 
-  setAvatarState: (state) =>
+  setAvatarState: (avatarState) =>
     set((state) => ({
       profile: {
         ...state.profile,
-        gamification: { ...state.profile.gamification, avatar_state: state },
+        gamification: { ...state.profile.gamification, avatar_state: avatarState },
       },
     })),
 
