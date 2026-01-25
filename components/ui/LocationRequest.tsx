@@ -5,7 +5,7 @@
 
 "use client";
 
-import { useLocation } from "@/providers/LocationProvider";
+import { useLocation } from "@/components/providers/LocationProvider";
 import { MapPinIcon, XMarkIcon } from "@heroicons/react/24/outline";
 import { Button } from "./Button";
 

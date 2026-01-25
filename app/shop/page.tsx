@@ -13,7 +13,7 @@ import {
   SparklesIcon,
   TrophyIcon,
   UsersIcon,
-  TrendingUpIcon,
+  ArrowTrendingUpIcon,
   CheckIcon,
   LockClosedIcon,
 } from "@heroicons/react/24/outline";
