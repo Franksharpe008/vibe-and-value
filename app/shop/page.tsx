@@ -15,7 +15,7 @@ import {
   UsersIcon,
   TrendingUpIcon,
   CheckIcon,
-  LockIcon,
+  LockClosedIcon,
 } from "@heroicons/react/24/outline";
 
 export default function ShopPage() {
@@ -162,7 +162,7 @@ export default function ShopPage() {
                           </>
                         ) : (
                           <>
-                            <LockIcon className="w-4 h-4 mr-1" />
+                            <LockClosedIcon className="w-4 h-4 mr-1" />
                             {item.price}
                           </>
                         )}
