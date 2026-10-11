@@ -334,7 +334,7 @@ export default function PlannerPage() {
             })}
           </div>
           <p className="meal-footnote">
-            {count} meals this week · Each week is saved separately.
+            {count} {count === 1 ? "meal" : "meals"} this week · Each week is saved separately.
           </p>
         </section>
         <aside className="meal-panel grocery-panel">

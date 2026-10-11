@@ -285,7 +285,7 @@ export const mockRecipes: Recipe[] = [
     difficulty: "easy",
     servings: 4,
     is_superfood_meal: true,
-    tags: ["vegan", "heart-healthy", "high-fiber", "meal-prep"],
+    tags: ["vegetarian", "high-fiber", "meal-prep"],
     ingredients: [
       {
         id: "i009",
