@@ -1,43 +1,45 @@
-# Vibe & Value · Meal Planning & Budget Comparisons
+# Vibe & Value · Meals, Portions & Grocery Budgets
 
-An interactive meal-planning prototype that connects recipes, ingredient price tradeoffs, a weekly plan, and progress feedback.
+A working meal-planning prototype by **Frank D. Sharpe**. Choose a recipe, adjust portions and ingredient swaps, build a weekly menu, and take one organized list shopping.
 
-**[Open the prototype](https://vibe-and-value.vercel.app/)** · [More work by Frank D. Sharpe](https://github.com/Franksharpe008/frank-sharpe-portfolio)
+**[Open Vibe & Value](https://vibe-and-value.vercel.app/)** · [Explore Frank's business systems](https://frank-sharpe-flagship-systems.vercel.app/) · [More selected work](https://github.com/Franksharpe008/frank-sharpe-portfolio)
 
-## Problem → implementation
+## Try the connected workflow
 
-A meal choice combines time, preference, nutrition, and budget. Vibe & Value brings those decisions into a single interface: discover a recipe, inspect its ingredient swaps, plan meals, and see progress feedback.
+1. **Discover** a recipe or save it with the heart. Search by name or tag and filter the collection.
+2. Open a recipe, choose the date, meal and servings, and compare its ingredient alternatives.
+3. Select **Add to my plan**. The planner opens the selected day, and the grocery list reflects your choices.
+4. Change portions, choose swaps, add another meal or mark one cooked. Ingredient estimates and quantities update together.
+5. Check items off, download the shopping list, and reload. Plans, favorites and grocery checks stay in this browser; each week has its own saved plan.
 
-## Try the workflow
+The four recipes, ingredient prices and original nutrition values are illustrative. Costs represent estimated ingredients used, not store package prices or live retailer quotes. Ingredient substitutions can change nutrition and preparation. Journey, Shop and Profile are labeled concept previews with sample statistics and rewards.
 
-1. Open **Discover** and inspect the **High-Protein Budget Buddha Bowl** recipe.
-2. Select **View Swaps** and compare the sample ingredient alternatives.
-3. Explore **Planner** for the weekly plan and shopping list.
-4. Inspect **Journey** and **Profile** for the connected progress state.
+## What changed in this revision
 
-Recipe navigation and the swap control were checked on the deployed site on October 4, 2026. Prices, nutrition scores, savings, profiles, stores, and leaderboard entries use sample data; they are not live retailer quotes or verified health outcomes.
+The previous planner used fixed 2024 sample dates and an unrelated grocery list. The October 11 revision connects actual recipe choices to editable weeks, serving-aware estimates, grouped ingredient quantities, swaps and export. It also replaces in-memory-only favorites/plans with device-local persistence, handles meal removal, preserves cooked status, and keeps unrelated weeks separate.
 
-## Technical decisions
+## Implementation
 
-- **Next.js, React, and TypeScript** provide connected routes for discovery, planning, progress, shop, and profile.
-- **Zustand** manages recipe, plan, shopping, and gamification state in the browser.
-- **Tailwind CSS and Framer Motion** support responsive layout and interaction feedback.
-- `lib/data/mockData.ts` separates sample data from interface and state logic.
-- `lib/store/index.ts` exposes the state transitions for inspection.
+- **Next.js / React / TypeScript**: connected discovery, recipe and planner routes.
+- **Zustand persistence**: saved weeks, grocery lists, budget and favorites in this browser's local storage. No sign-in required.
+- **Derived records**: one cost calculation across recipe, menu and shopping list; same-unit ingredient quantities combine, while different units remain explicit.
+- **Accessible controls**: labeled date/serving fields, native checkboxes, keyboard focus, responsive layout and reduced-motion support.
+- **Consumer interface**: compact food photography, a clear choose → plan → shop sequence and visible empty states.
 
-State is in memory in the current prototype; changes are not backed by authentication or a server database and may reset after a reload. Maps configuration is optional and should use a restricted browser key.
+`lib/utils/mealPlanner.ts` contains the calculation and grocery-building rules. `lib/store/index.ts` owns saved transitions. `lib/data/mockData.ts` keeps illustrative recipe content separate from interface behavior.
 
-## Run locally
+Local storage is specific to this device/browser and can be cleared by the browser. There is no account sync, live grocery integration or production health tracking. Original nutrition values do not recalculate for swaps. Optional map concepts are separate from the working planner.
+
+## Run and verify
 
 ```bash
 npm ci
 npm run dev
+npm test
+npm run build
+npm start
 ```
 
-Open `http://localhost:3000`. Run `npm run build` and `npm start` for a production build. Use a Node.js release compatible with the checked-in Next.js version.
+The planner calculation tests cover portions, swaps, omitted ingredients, combined grocery quantities, week boundaries, recalculated totals and checked-item invalidation when quantities change. Browser verification covers recipe-to-plan entry, editing, saved reload, week navigation and an actual shopping-list download. Verification receipts and screenshots stay outside the public source under local `outputs/`.
 
-## Scope and next steps
-
-This project demonstrates a multi-step product experience and explicit state management. Live grocery data, authenticated accounts, durable persistence, real social competition, and production nutrition integrations are future work. A 3D avatar concept is not evidence of a completed production 3D system.
-
-Created through AI-assisted development directed by Frank D. Sharpe, with an emphasis on practical tradeoffs, interface clarity, and connected workflows.
+Created through AI-assisted development directed by Frank D. Sharpe: product requirements, workflow decisions, integration, testing and iterative improvement.

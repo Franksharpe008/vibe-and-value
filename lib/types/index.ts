@@ -122,6 +122,8 @@ export type IngredientCategory =
   | "herbs";
 
 export interface SwapOption {
+  amount?: string;
+  category?: IngredientCategory;
   item: string;
   price: number;
   savings: number;
@@ -220,6 +222,8 @@ export interface DailyPlan {
 }
 
 export interface PlannedMeal {
+  id?: string;
+  swaps?: string[];
   recipe_id: string;
   meal_type: "breakfast" | "lunch" | "dinner" | "snack";
   servings: number;

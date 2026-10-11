@@ -2,7 +2,7 @@
 // VIBE & VALUE - Root Layout
 // ============================================
 
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Playfair_Display, Inter } from "next/font/google";
 import "./globals.css";
 import { Navigation } from "@/components/navigation/Navigation";
@@ -22,22 +22,21 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Vibe & Value - Gamified Meal Planning",
+  title: "Vibe & Value · Meal Planning & Grocery Budgets",
   description:
-    "A gamified, editorial-grade meal planning app that intersects high-nutrition, low-cost groceries, and real-time physical progress tracking.",
+    "Plan meals, adjust portions, compare ingredient estimates and build a grocery list. A working consumer prototype by Frank D. Sharpe.",
   manifest: "/manifest.json",
-  themeColor: "#7a9664",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
     title: "Vibe & Value",
   },
-  viewport: {
-    width: "device-width",
-    initialScale: 1,
-    maximumScale: 1,
-    userScalable: false,
-  },
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  themeColor: "#294c35",
 };
 
 export default function RootLayout({
@@ -46,10 +45,18 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" suppressHydrationWarning className={`${playfair.variable} ${inter.variable}`}>
+    <html
+      lang="en"
+      suppressHydrationWarning
+      className={`${playfair.variable} ${inter.variable}`}
+    >
       <body className="min-h-screen bg-soft-cream overflow-x-hidden">
         <LocationProvider>
           <div className="flex flex-col min-h-screen">
+            <div className="meal-notice">
+              Interactive prototype <span>·</span> Illustrative costs &
+              nutrition <span>·</span> Plans save in this browser
+            </div>
             <main className="flex-1 pb-20 md:pb-0">{children}</main>
             <Navigation />
           </div>

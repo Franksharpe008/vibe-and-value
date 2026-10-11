@@ -5,8 +5,8 @@
 "use client";
 
 import { use, useEffect, useState } from "react";
-import { useRecipeStore, useUserStore } from "@/lib/store";
-import { mockRecipes } from "@/lib/data/mockData";
+import { useRecipeStore, useUserStore, usePlannerStore } from "@/lib/store";
+import { dateKey, recipeCost, scaleAmount } from "@/lib/utils/mealPlanner";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import {
@@ -32,17 +32,23 @@ export default function RecipeDetailPage({
   const router = useRouter();
   const recipes = useRecipeStore((state) => state.recipes);
   const selectedRecipe = useRecipeStore((state) => state.selectedRecipe);
-  const completeMeal = useUserStore((state) => state.completeMeal);
 
-  const recipe = recipes.find((r) => r.id === id) || selectedRecipe || recipes[0];
-  const [showSwaps, setShowSwaps] = useState(false);
-  const [swappedIngredients, setSwappedIngredients] = useState<Set<string>>(new Set());
-  const [isCompleting, setIsCompleting] = useState(false);
+  const recipe = recipes.find((r) => r.id === id);
+  const addMeal = usePlannerStore((s) => s.addMealToPlan);
+  const [swappedIngredients, setSwappedIngredients] = useState<Set<string>>(
+    new Set(),
+  );
+  const [planDate, setPlanDate] = useState(dateKey(new Date()));
+  const [planServings, setPlanServings] = useState(2);
+  const [planType, setPlanType] = useState("dinner");
 
   if (!recipe) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <p>Recipe not found</p>
+        <div>
+          <h1>Recipe not found</h1>
+          <Link href="/discover">Back to recipes</Link>
+        </div>
       </div>
     );
   }
@@ -55,7 +61,7 @@ export default function RecipeDetailPage({
     return acc;
   }, 0);
 
-  const finalCostPerServing = recipe.base_cost_per_serving - totalSavings;
+  const finalCostPerServing = recipeCost(recipe, 1, [...swappedIngredients]);
 
   const toggleSwap = (ingredientId: string) => {
     setSwappedIngredients((prev) => {
@@ -67,27 +73,6 @@ export default function RecipeDetailPage({
       }
       return newSet;
     });
-  };
-
-  const handleCompleteMeal = () => {
-    setIsCompleting(true);
-    const usedSwaps = swappedIngredients.size > 0;
-
-    setTimeout(() => {
-      completeMeal(recipe, usedSwaps);
-      const coinsEarned = Math.floor(recipe.health_score / 10) + totalSavings * 2;
-
-      if (totalSavings > 0) {
-        showAchievement(
-          `Meal complete! +${coinsEarned} Health Coins & saved $${totalSavings.toFixed(2)}! 🎉`
-        );
-      } else {
-        showSuccess(`Meal complete! +${coinsEarned} Health Coins!`);
-      }
-
-      setIsCompleting(false);
-      router.push("/journey");
-    }, 1000);
   };
 
   return (
@@ -107,7 +92,7 @@ export default function RecipeDetailPage({
       </header>
 
       {/* Hero Image */}
-      <div className="relative aspect-[4/3] md:aspect-[16/9]">
+      <div className="relative h-[320px] md:h-[400px] max-w-screen-lg mx-auto">
         <Image
           src={recipe.image_url}
           alt={recipe.title}
@@ -130,14 +115,82 @@ export default function RecipeDetailPage({
       </div>
 
       <div className="max-w-screen-lg mx-auto px-4 py-6 space-y-6">
+        <section className="meal-panel" aria-labelledby="add-plan-title">
+          <p className="meal-eyebrow">MAKE IT PART OF YOUR WEEK</p>
+          <h2 id="add-plan-title" className="text-2xl mb-4">
+            Plan this meal
+          </h2>
+          <form
+            className="add-meal-form"
+            onSubmit={(e) => {
+              e.preventDefault();
+              addMeal(recipe.id, planDate, planType, planServings, [
+                ...swappedIngredients,
+              ]);
+              router.push("/planner?day=" + planDate);
+            }}
+          >
+            <div className="form-pair">
+              <label>
+                Date
+                <input
+                  aria-label="Meal date"
+                  type="date"
+                  required
+                  value={planDate}
+                  onChange={(e) => setPlanDate(e.target.value)}
+                />
+              </label>
+              <label>
+                Meal
+                <select
+                  value={planType}
+                  onChange={(e) => setPlanType(e.target.value)}
+                >
+                  {["breakfast", "lunch", "dinner", "snack"].map((t) => (
+                    <option key={t}>{t}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <label>
+              Servings
+              <input
+                aria-label="Plan servings"
+                required
+                type="number"
+                min="1"
+                max="12"
+                value={planServings}
+                onChange={(e) => setPlanServings(Number(e.target.value))}
+              />
+            </label>
+            <div className="meal-section-top">
+              <span className="text-sm">
+                $
+                {recipeCost(recipe, planServings, [
+                  ...swappedIngredients,
+                ]).toFixed(2)}{" "}
+                ingredient estimate · {swappedIngredients.size} swaps
+              </span>
+              <button className="meal-button" type="submit">
+                Add to my plan ↗
+              </button>
+            </div>
+          </form>
+          <p className="meal-footnote">
+            Your plan and shopping list save in this browser. Recipe prices and
+            nutrition are illustrative.
+          </p>
+        </section>
         {/* Stats Cards */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <Card padding="sm" className="text-center">
             <ClockIcon className="w-6 h-6 mx-auto text-vibrant-orange-500 mb-1" />
             <p className="text-2xl font-bold text-editorial-black">
-              {recipe.prep_time_mins}
+              {recipe.prep_time_mins + (recipe.cook_time_mins ?? 0)}
             </p>
-            <p className="text-xs text-editorial-gray">Minutes</p>
+            <p className="text-xs text-editorial-gray">Prep + cook minutes</p>
           </Card>
           <Card padding="sm" className="text-center">
             <FireIcon className="w-6 h-6 mx-auto text-vibrant-orange-500 mb-1" />
@@ -151,14 +204,14 @@ export default function RecipeDetailPage({
             <p className="text-2xl font-bold text-editorial-black">
               {recipe.health_score}
             </p>
-            <p className="text-xs text-editorial-gray">Health Score</p>
+            <p className="text-xs text-editorial-gray">Sample Score</p>
           </Card>
           <Card padding="sm" className="text-center">
             <CurrencyDollarIcon className="w-6 h-6 mx-auto text-vibrant-orange-500 mb-1" />
             <p className="text-2xl font-bold text-editorial-black">
               ${finalCostPerServing.toFixed(2)}
             </p>
-            <p className="text-xs text-editorial-gray">Per Serving</p>
+            <p className="text-xs text-editorial-gray">Estimate / serving</p>
           </Card>
         </div>
 
@@ -174,16 +227,13 @@ export default function RecipeDetailPage({
                   Smart Budget Swaps Available
                 </h3>
                 <p className="text-editorial-gray text-sm mb-3">
-                  Save money while keeping the nutrition! Swap expensive ingredients for
-                  budget-friendly alternatives.
+                  Compare illustrative ingredient alternatives. Costs update
+                  with your choices; nutrition values describe the original
+                  recipe.
                 </p>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => setShowSwaps(!showSwaps)}
-                >
-                  {showSwaps ? "Hide Swaps" : "View Swaps"}
-                </Button>
+                <a href="#ingredient-list" className="meal-button secondary">
+                  Compare ingredient swaps ↓
+                </a>
               </div>
             </div>
           </Card>
@@ -191,7 +241,9 @@ export default function RecipeDetailPage({
 
         {/* Nutrition Info */}
         <Card padding="md">
-          <h3 className="font-display font-semibold text-lg mb-4">Nutrition per Serving</h3>
+          <h3 className="font-display font-semibold text-lg mb-4">
+            Nutrition per Serving
+          </h3>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div>
               <p className="text-sm text-editorial-gray">Protein</p>
@@ -222,13 +274,19 @@ export default function RecipeDetailPage({
 
         {/* Ingredients with Budget Swaps */}
         <Card padding="md">
-          <h3 className="font-display font-semibold text-lg mb-4">Ingredients</h3>
+          <h3
+            id="ingredient-list"
+            className="font-display font-semibold text-lg mb-4 scroll-mt-24"
+          >
+            Ingredients
+          </h3>
           <div className="space-y-3">
             {recipe.ingredients.map((ingredient) => {
               const isSwapped = swappedIngredients.has(ingredient.id);
-              const activeItem = isSwapped && ingredient.swap_option
-                ? ingredient.swap_option
-                : ingredient;
+              const activeItem =
+                isSwapped && ingredient.swap_option
+                  ? ingredient.swap_option
+                  : ingredient;
 
               return (
                 <div
@@ -249,7 +307,16 @@ export default function RecipeDetailPage({
                           {activeItem.item}
                         </h4>
                       </div>
-                      <p className="text-sm text-editorial-gray">{ingredient.amount}</p>
+                      <p className="text-sm text-editorial-gray">
+                        {scaleAmount(
+                          (isSwapped && ingredient.swap_option?.amount) ||
+                            ingredient.amount,
+                          planServings / recipe.servings,
+                        )}{" "}
+                        <span className="text-xs">
+                          for {planServings} servings
+                        </span>
+                      </p>
                       {isSwapped && ingredient.swap_option && (
                         <div className="mt-2 text-sm text-earth-green-600">
                           ✓ {ingredient.swap_option.health_benefit}
@@ -258,7 +325,11 @@ export default function RecipeDetailPage({
                     </div>
                     <div className="text-right">
                       <p className="font-bold text-editorial-black">
-                        ${activeItem.price.toFixed(2)}
+                        $
+                        {(
+                          (activeItem.price * planServings) /
+                          recipe.servings
+                        ).toFixed(2)}
                       </p>
                       {ingredient.swap_option && (
                         <button
@@ -281,7 +352,12 @@ export default function RecipeDetailPage({
                           ) : (
                             <>
                               <CurrencyDollarIcon className="w-3 h-3" />
-                              Save ${ingredient.swap_option.savings.toFixed(2)}
+                              Save $
+                              {(
+                                (ingredient.swap_option.savings *
+                                  planServings) /
+                                recipe.servings
+                              ).toFixed(2)}
                             </>
                           )}
                         </button>
@@ -296,10 +372,11 @@ export default function RecipeDetailPage({
             <div className="mt-4 p-4 bg-vibrant-orange-50 rounded-2xl border-2 border-vibrant-orange-200">
               <div className="flex items-center justify-between">
                 <span className="font-semibold text-vibrant-orange-700">
-                  Total Savings with Swaps:
+                  Estimated batch reduction:
                 </span>
                 <span className="text-2xl font-bold text-vibrant-orange-600">
-                  ${totalSavings.toFixed(2)}
+                  $
+                  {((totalSavings * planServings) / recipe.servings).toFixed(2)}
                 </span>
               </div>
             </div>
@@ -308,7 +385,9 @@ export default function RecipeDetailPage({
 
         {/* Instructions */}
         <Card padding="md">
-          <h3 className="font-display font-semibold text-lg mb-4">Instructions</h3>
+          <h3 className="font-display font-semibold text-lg mb-4">
+            Instructions
+          </h3>
           <ol className="space-y-4">
             {recipe.instructions.map((instruction, index) => (
               <li key={index} className="flex gap-4">
@@ -321,28 +400,15 @@ export default function RecipeDetailPage({
           </ol>
         </Card>
 
-        {/* Complete Meal CTA */}
-        <Card padding="md" className="gradient-progress text-white text-center">
-          <h3 className="font-display font-bold text-2xl mb-2">
-            Ready to Cook?
-          </h3>
-          <p className="text-white/90 mb-4">
-            Complete this meal to earn{" "}
-            <span className="font-bold">
-              {Math.floor(recipe.health_score / 10) + totalSavings * 2}
-            </span>{" "}
-            Health Coins!
-            {totalSavings > 0 && ` Plus save $${totalSavings.toFixed(2)}!`}
+        <Card padding="md" className="text-center">
+          <h3 className="font-display text-2xl mb-3">From recipe to ready.</h3>
+          <p className="text-editorial-gray mb-4">
+            Add this meal to your week, take the list shopping, then mark it
+            cooked in your planner.
           </p>
-          <Button
-            variant="secondary"
-            size="lg"
-            onClick={handleCompleteMeal}
-            loading={isCompleting}
-          >
-            <CheckIcon className="w-5 h-5 mr-2" />
-            Complete Meal
-          </Button>
+          <Link href="/planner" className="meal-button secondary">
+            Open my weekly plan ↗
+          </Link>
         </Card>
       </div>
     </div>

@@ -207,6 +207,7 @@ export default function JourneyPage() {
 
   return (
     <div className="min-h-screen bg-soft-cream">
+      <div className="meal-notice">Concept preview · Profiles, achievements, store items and health statistics on this page use sample data.</div>
       {/* Header */}
       <header className="pt-safe pt-6 pb-4 px-4 bg-white sticky top-0 z-10 border-b border-earth-green-100">
         <div className="max-w-screen-xl mx-auto">

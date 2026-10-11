@@ -3,6 +3,13 @@
 // ============================================
 
 import { create } from "zustand";
+import { persist, createJSONStorage } from "zustand/middleware";
+import {
+  makeShoppingList,
+  normalizePlan,
+  newPlan,
+  mondayOf,
+} from "../utils/mealPlanner";
 import type {
   UserProfile,
   Recipe,
@@ -54,13 +61,17 @@ export const useUserStore = create<UserState>((set, get) => ({
     set((state) => ({
       profile: {
         ...state.profile,
-        gamification: { ...state.profile.gamification, avatar_state: avatarState },
+        gamification: {
+          ...state.profile.gamification,
+          avatar_state: avatarState,
+        },
       },
     })),
 
   updateCalories: (calories) =>
     set((state) => {
-      const newCalories = state.profile.progress_stats.calories_consumed_today + calories;
+      const newCalories =
+        state.profile.progress_stats.calories_consumed_today + calories;
       const dailyGoal = state.profile.preferences.daily_calorie_goal;
 
       return {
@@ -90,7 +101,10 @@ export const useUserStore = create<UserState>((set, get) => ({
           },
         },
       }));
-    } else if (!hasExploded && profile.gamification.avatar_state === "exploded") {
+    } else if (
+      !hasExploded &&
+      profile.gamification.avatar_state === "exploded"
+    ) {
       set((state) => ({
         profile: {
           ...state.profile,
@@ -190,121 +204,289 @@ interface RecipeState {
   getFilteredRecipes: () => Recipe[];
 }
 
-export const useRecipeStore = create<RecipeState>((set, get) => ({
-  recipes: mockRecipes,
-  selectedRecipe: null,
-  favorites: [],
-  searchQuery: "",
-  dietaryFilter: [],
+export const useRecipeStore = create<RecipeState>()(
+  persist(
+    (set, get) => ({
+      recipes: mockRecipes,
+      selectedRecipe: null,
+      favorites: [],
+      searchQuery: "",
+      dietaryFilter: [],
 
-  setRecipes: (recipes) => set({ recipes }),
+      setRecipes: (recipes) => set({ recipes }),
 
-  setSelectedRecipe: (recipe) => set({ selectedRecipe: recipe }),
+      setSelectedRecipe: (recipe) => set({ selectedRecipe: recipe }),
 
-  toggleFavorite: (recipeId) =>
-    set((state) => ({
-      favorites: state.favorites.includes(recipeId)
-        ? state.favorites.filter((id) => id !== recipeId)
-        : [...state.favorites, recipeId],
-    })),
+      toggleFavorite: (recipeId) =>
+        set((state) => ({
+          favorites: state.favorites.includes(recipeId)
+            ? state.favorites.filter((id) => id !== recipeId)
+            : [...state.favorites, recipeId],
+        })),
 
-  setSearchQuery: (query) => set({ searchQuery: query }),
+      setSearchQuery: (query) => set({ searchQuery: query }),
 
-  setDietaryFilter: (filters) => set({ dietaryFilter: filters }),
+      setDietaryFilter: (filters) => set({ dietaryFilter: filters }),
 
-  getFilteredRecipes: () => {
-    const { recipes, searchQuery, dietaryFilter } = get();
-    return recipes.filter((recipe) => {
-      const matchesSearch =
-        recipe.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        recipe.tags.some((tag) =>
-          tag.toLowerCase().includes(searchQuery.toLowerCase()),
-        );
+      getFilteredRecipes: () => {
+        const { recipes, searchQuery, dietaryFilter } = get();
+        return recipes.filter((recipe) => {
+          const matchesSearch =
+            recipe.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            recipe.tags.some((tag) =>
+              tag.toLowerCase().includes(searchQuery.toLowerCase()),
+            );
 
-      const matchesDietary =
-        dietaryFilter.length === 0 ||
-        dietaryFilter.some((filter) => recipe.tags.includes(filter));
+          const matchesDietary =
+            dietaryFilter.length === 0 ||
+            dietaryFilter.some((filter) => recipe.tags.includes(filter));
 
-      return matchesSearch && matchesDietary;
-    });
-  },
-}));
+          return matchesSearch && matchesDietary;
+        });
+      },
+    }),
+    {
+      name: "vibe-value-favorites-v2",
+      storage: createJSONStorage(() => window.localStorage),
+      partialize: (state) => ({ favorites: state.favorites }),
+    },
+  ),
+);
 
 // ============================================
 // Planner Store
 // ============================================
 interface PlannerState {
   weeklyPlan: WeeklyPlan;
+  savedWeeks: Record<string, WeeklyPlan>;
+  savedShopping: Record<string, ShoppingList>;
   shoppingList: ShoppingList;
   nearbyStores: StoreLocation[];
   selectedStore: StoreLocation | null;
+  budget: number;
+  setBudget: (value: number) => void;
+  setWeek: (week: string) => void;
   setWeeklyPlan: (plan: WeeklyPlan) => void;
   setShoppingList: (list: ShoppingList) => void;
   setNearbyStores: (stores: StoreLocation[]) => void;
   setSelectedStore: (store: StoreLocation | null) => void;
-  toggleShoppingItem: (itemId: string) => void;
-  addMealToPlan: (recipeId: string, date: string, mealType: string) => void;
+  toggleShoppingItem: (id: string) => void;
+  addMealToPlan: (
+    recipeId: string,
+    date: string,
+    mealType: string,
+    servings?: number,
+    swaps?: string[],
+  ) => void;
+  removeMeal: (date: string, id: string) => void;
+  updateMeal: (
+    date: string,
+    id: string,
+    updates: Partial<import("../types").PlannedMeal>,
+  ) => void;
 }
-
-export const usePlannerStore = create<PlannerState>((set) => ({
-  weeklyPlan: mockWeeklyPlan,
-  shoppingList: mockShoppingList,
-  nearbyStores: mockStores,
-  selectedStore: null,
-
-  setWeeklyPlan: (plan) => set({ weeklyPlan: plan }),
-
-  setShoppingList: (list) => set({ shoppingList: list }),
-
-  setNearbyStores: (stores) => set({ nearbyStores: stores }),
-
-  setSelectedStore: (store) => set({ selectedStore: store }),
-
-  toggleShoppingItem: (itemId) =>
-    set((state) => ({
-      shoppingList: {
-        ...state.shoppingList,
-        items: state.shoppingList.items.map((item) =>
-          item.ingredient_id === itemId
-            ? { ...item, checked: !item.checked }
-            : item,
-        ),
+const initialPlan = newPlan(mondayOf(new Date()));
+function plannedState(
+  plan: WeeklyPlan,
+  previous: ShoppingList,
+  saved: Record<string, WeeklyPlan>,
+  shopping: Record<string, ShoppingList> = {},
+) {
+  const normalized = normalizePlan(plan, mockRecipes);
+  const lists = { ...shopping, [previous.created_at]: previous };
+  const shoppingList = makeShoppingList(
+    normalized,
+    mockRecipes,
+    lists[plan.week_start],
+  );
+  return {
+    weeklyPlan: normalized,
+    savedWeeks: { ...saved, [plan.week_start]: normalized },
+    shoppingList,
+    savedShopping: { ...lists, [plan.week_start]: shoppingList },
+  };
+}
+export const usePlannerStore = create<PlannerState>()(
+  persist(
+    (set, get) => ({
+      weeklyPlan: initialPlan,
+      savedWeeks: {},
+      savedShopping: {},
+      shoppingList: makeShoppingList(initialPlan, mockRecipes),
+      nearbyStores: mockStores,
+      selectedStore: null,
+      budget: 150,
+      setBudget: (budget) => {
+        if (Number.isFinite(budget) && budget >= 1 && budget <= 10000)
+          set({ budget });
       },
-    })),
-
-  addMealToPlan: (recipeId, date, mealType) =>
-    set((state) => {
-      const dayPlan = state.weeklyPlan.daily_plans.find(
-        (plan) => plan.date === date,
-      );
-
-      if (dayPlan) {
-        return {
-          weeklyPlan: {
-            ...state.weeklyPlan,
-            daily_plans: state.weeklyPlan.daily_plans.map((plan) =>
-              plan.date === date
-                ? {
-                    ...plan,
-                    meals: [
-                      ...plan.meals,
-                      {
-                        recipe_id: recipeId,
-                        meal_type: mealType as any,
-                        servings: 1,
-                        completed: false,
-                      },
-                    ],
-                  }
-                : plan,
-            ),
-          },
-        };
-      }
-
-      return state;
+      setWeek: (week) =>
+        set((state) => {
+          const saved = {
+            ...state.savedWeeks,
+            [state.weeklyPlan.week_start]: state.weeklyPlan,
+          };
+          return plannedState(
+            saved[week] ?? newPlan(week),
+            state.shoppingList,
+            saved,
+            state.savedShopping,
+          );
+        }),
+      setWeeklyPlan: (plan) =>
+        set((state) =>
+          plannedState(
+            plan,
+            state.shoppingList,
+            state.savedWeeks,
+            state.savedShopping,
+          ),
+        ),
+      setShoppingList: (shoppingList) => set({ shoppingList }),
+      setNearbyStores: (nearbyStores) => set({ nearbyStores }),
+      setSelectedStore: (selectedStore) => set({ selectedStore }),
+      toggleShoppingItem: (id) =>
+        set((state) => {
+          const items = state.shoppingList.items.map((i) =>
+            i.ingredient_id === id ? { ...i, checked: !i.checked } : i,
+          );
+          return {
+            shoppingList: {
+              ...state.shoppingList,
+              items,
+              is_completed: items.length > 0 && items.every((i) => i.checked),
+            },
+          };
+        }),
+      addMealToPlan: (recipe_id, date, mealType, servings = 1, swaps = []) =>
+        set((state) => {
+          if (
+            !/^\d{4}-\d{2}-\d{2}$/.test(date) ||
+            !Number.isFinite(new Date(date + "T12:00:00").getTime()) ||
+            !mockRecipes.some((r) => r.id === recipe_id) ||
+            !["breakfast", "lunch", "dinner", "snack"].includes(mealType) ||
+            !Number.isFinite(servings)
+          )
+            return state;
+          const week = mondayOf(new Date(date + "T12:00:00")),
+            base =
+              week === state.weeklyPlan.week_start
+                ? state.weeklyPlan
+                : (state.savedWeeks[week] ?? newPlan(week));
+          const meal = {
+            id: crypto.randomUUID(),
+            recipe_id,
+            meal_type: mealType as import("../types").PlannedMeal["meal_type"],
+            servings: Math.max(1, Math.min(12, Math.round(servings))),
+            swaps,
+            completed: false,
+          };
+          const daily_plans = base.daily_plans.some((d) => d.date === date)
+            ? base.daily_plans.map((d) =>
+                d.date === date ? { ...d, meals: [...d.meals, meal] } : d,
+              )
+            : [
+                ...base.daily_plans,
+                {
+                  date,
+                  meals: [meal],
+                  budget_used: 0,
+                  calories: 0,
+                  water_intake_oz: 0,
+                  exercises_completed: 0,
+                },
+              ];
+          return plannedState(
+            { ...base, daily_plans },
+            state.shoppingList,
+            {
+              ...state.savedWeeks,
+              [state.weeklyPlan.week_start]: state.weeklyPlan,
+            },
+            state.savedShopping,
+          );
+        }),
+      removeMeal: (date, id) =>
+        set((state) =>
+          plannedState(
+            {
+              ...state.weeklyPlan,
+              daily_plans: state.weeklyPlan.daily_plans.map((d) =>
+                d.date === date
+                  ? { ...d, meals: d.meals.filter((m) => m.id !== id) }
+                  : d,
+              ),
+            },
+            state.shoppingList,
+            state.savedWeeks,
+            state.savedShopping,
+          ),
+        ),
+      updateMeal: (date, id, updates) =>
+        set((state) =>
+          plannedState(
+            {
+              ...state.weeklyPlan,
+              daily_plans: state.weeklyPlan.daily_plans.map((d) =>
+                d.date === date
+                  ? {
+                      ...d,
+                      meals: d.meals.map((m) =>
+                        m.id === id
+                          ? {
+                              ...m,
+                              ...updates,
+                              servings: Math.max(
+                                1,
+                                Math.min(
+                                  12,
+                                  Math.round(updates.servings ?? m.servings),
+                                ),
+                              ),
+                            }
+                          : m,
+                      ),
+                    }
+                  : d,
+              ),
+            },
+            state.shoppingList,
+            state.savedWeeks,
+            state.savedShopping,
+          ),
+        ),
     }),
-}));
+    {
+      name: "vibe-value-planner-v2",
+      version: 2,
+      storage: createJSONStorage(() => window.localStorage),
+      merge: (saved, current) => {
+        const data = saved as Partial<PlannerState>;
+        const weeklyPlan = normalizePlan(
+          data.weeklyPlan ?? current.weeklyPlan,
+          mockRecipes,
+        );
+        return {
+          ...current,
+          ...data,
+          weeklyPlan,
+          shoppingList: makeShoppingList(
+            weeklyPlan,
+            mockRecipes,
+            data.shoppingList,
+          ),
+        };
+      },
+      partialize: (s) => ({
+        weeklyPlan: s.weeklyPlan,
+        savedWeeks: s.savedWeeks,
+        savedShopping: s.savedShopping,
+        shoppingList: s.shoppingList,
+        budget: s.budget,
+      }),
+    },
+  ),
+);
 
 // ============================================
 // Shop Store
@@ -386,7 +568,11 @@ export const useShopStore = create<ShopState>((set, get) => ({
           ...challenge,
           tasks: challenge.tasks.map((task) =>
             task.id === taskId
-              ? { ...task, current: task.current + 1, is_completed: task.current + 1 >= task.target }
+              ? {
+                  ...task,
+                  current: task.current + 1,
+                  is_completed: task.current + 1 >= task.target,
+                }
               : task,
           ),
         };
@@ -423,9 +609,7 @@ export const useSocialStore = create<SocialState>((set) => ({
   likePost: (postId) =>
     set((state) => ({
       feedPosts: state.feedPosts.map((post) =>
-        post.id === postId
-          ? { ...post, likes: post.likes + 1 }
-          : post,
+        post.id === postId ? { ...post, likes: post.likes + 1 } : post,
       ),
     })),
 

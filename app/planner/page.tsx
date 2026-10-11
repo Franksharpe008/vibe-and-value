@@ -1,277 +1,416 @@
-// ============================================
-// VIBE & VALUE - Planner Tab (Weekly Budget)
-// Calendar, Smart Grocery List, Google Maps Store Finder
-// ============================================
-
 "use client";
-
-import { useState } from "react";
-import { usePlannerStore, useUserStore } from "@/lib/store";
-import { Card } from "@/components/ui/Card";
-import { Button } from "@/components/ui/Button";
-import {
-  CalendarIcon,
-  MapPinIcon,
-  ShoppingCartIcon,
-  ChevronLeftIcon,
-  ChevronRightIcon,
-  CheckIcon,
-} from "@heroicons/react/24/outline";
-import { format, addDays, startOfWeek, isSameDay } from "date-fns";
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import Image from "next/image";
+import { usePlannerStore, useRecipeStore } from "@/lib/store";
+import { dateKey, mondayOf, recipeCost } from "@/lib/utils/mealPlanner";
+import { format, addDays } from "date-fns";
 
 export default function PlannerPage() {
-  const { weeklyPlan, shoppingList, nearbyStores, selectedStore, setSelectedStore, toggleShoppingItem } = usePlannerStore();
-  const { profile } = useUserStore();
-  const [currentWeekStart, setCurrentWeekStart] = useState(startOfWeek(new Date()));
-
-  // Generate week days
-  const weekDays = Array.from({ length: 7 }, (_, i) => {
-    const date = addDays(currentWeekStart, i);
-    return date;
-  });
-
-  // Get plan for specific date
-  const getPlanForDate = (date: Date) => {
-    const dateStr = format(date, "yyyy-MM-dd");
-    return weeklyPlan.daily_plans.find((plan) => plan.date === dateStr);
+  const p = usePlannerStore(),
+    recipes = useRecipeStore((s) => s.recipes);
+  const [ready, setReady] = useState(false),
+    [selected, setSelected] = useState(""),
+    [adding, setAdding] = useState(false),
+    [recipeId, setRecipeId] = useState("r001"),
+    [servings, setServings] = useState(2),
+    [type, setType] = useState("dinner"),
+    [message, setMessage] = useState("");
+  useEffect(() => {
+    setReady(true);
+    const day = new URLSearchParams(window.location.search).get("day");
+    const today = dateKey(new Date());
+    setSelected(
+      day && /^\d{4}-\d{2}-\d{2}$/.test(day)
+        ? day
+        : mondayOf(new Date()) === p.weeklyPlan.week_start
+          ? today
+          : (p.weeklyPlan.daily_plans.find((d) => d.meals.length)?.date ??
+            p.weeklyPlan.week_start),
+    );
+  }, []);
+  if (!ready)
+    return (
+      <main className="meal-shell">
+        <p>Opening your meal plan…</p>
+      </main>
+    );
+  const start = new Date(p.weeklyPlan.week_start + "T12:00:00"),
+    days = Array.from({ length: 7 }, (_, i) => addDays(start, i));
+  const active = selected.startsWith(p.weeklyPlan.week_start)
+    ? selected
+    : days.some((d) => dateKey(d) === selected)
+      ? selected
+      : p.weeklyPlan.week_start;
+  const meals =
+      p.weeklyPlan.daily_plans.find((d) => d.date === active)?.meals ?? [],
+    count = p.weeklyPlan.daily_plans.reduce((s, d) => s + d.meals.length, 0),
+    checked = p.shoppingList.items.filter((i) => i.checked).length;
+  const changeWeek = (offset: number) => {
+    const next = dateKey(addDays(start, offset));
+    p.setWeek(next);
+    setSelected(next);
+    setAdding(false);
   };
-
-  const navigateWeek = (direction: "prev" | "next") => {
-    const daysToAdd = direction === "next" ? 7 : -7;
-    setCurrentWeekStart(addDays(currentWeekStart, daysToAdd));
-  };
-
-  const totalEstimatedCost = shoppingList.items.reduce((acc, item) => acc + item.estimated_price, 0);
-  const checkedItems = shoppingList.items.filter((item) => item.checked).length;
-
+  const shoppingText =
+    `Vibe & Value · ${format(start, "MMM d, yyyy")}\nIngredient estimates, not live store prices.\n\n` +
+    p.shoppingList.items
+      .map(
+        (i) =>
+          `${i.checked ? "[x]" : "[ ]"} ${i.item} — ${i.amount} — $${i.estimated_price.toFixed(2)}`,
+      )
+      .join("\n") +
+    `\n\nEstimated ingredients: $${p.shoppingList.total_estimated_cost.toFixed(2)}\n`;
   return (
-    <div className="min-h-screen bg-soft-cream">
-      {/* Header */}
-      <header className="pt-safe pt-6 pb-4 px-4 bg-white sticky top-0 z-10 border-b border-earth-green-100">
-        <div className="max-w-screen-xl mx-auto">
-          <h1 className="text-3xl md:text-4xl font-display font-bold text-editorial-black">
-            Weekly Planner
+    <div className="meal-shell">
+      <header className="meal-heading">
+        <div>
+          <p className="meal-eyebrow">VIBE & VALUE / YOUR WEEK</p>
+          <h1>
+            A little planning.
+            <br />
+            <em>A better week.</em>
           </h1>
-          <p className="text-editorial-gray mt-1">
-            Plan your meals and budget
+          <p className="meal-sub">
+            Meals, portions and groceries—connected. Your changes stay in this
+            browser.
           </p>
         </div>
+        <Link href="/discover" className="meal-button secondary">
+          Find a recipe ↗
+        </Link>
       </header>
-
-      <div className="max-w-screen-xl mx-auto px-4 py-6 space-y-6">
-        {/* Budget Overview */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <Card padding="md" className="text-center">
-            <p className="text-sm text-editorial-gray mb-1">Weekly Budget</p>
-            <p className="text-3xl font-bold text-editorial-black">
-              ${profile.preferences.weekly_budget_limit.toFixed(2)}
-            </p>
-          </Card>
-          <Card padding="md" className="text-center">
-            <p className="text-sm text-editorial-gray mb-1">Spent This Week</p>
-            <p className="text-3xl font-bold text-vibrant-orange-500">
-              ${weeklyPlan.total_budget_used.toFixed(2)}
-            </p>
-          </Card>
-          <Card padding="md" className="text-center">
-            <p className="text-sm text-editorial-gray mb-1">Remaining</p>
-            <p className="text-3xl font-bold text-earth-green-600">
-              ${(profile.preferences.weekly_budget_limit - weeklyPlan.total_budget_used).toFixed(2)}
-            </p>
-          </Card>
+      <section className="meal-budget" aria-label="Weekly budget">
+        <label>
+          Ingredient budget{" "}
+          <div className="budget-input">
+            $
+            <input
+              aria-label="Weekly ingredient budget"
+              type="number"
+              min="1"
+              max="10000"
+              value={p.budget}
+              onChange={(e) => p.setBudget(Number(e.target.value))}
+            />
+          </div>
+        </label>
+        <div>
+          <span>Planned ingredient estimate</span>
+          <strong>${p.weeklyPlan.total_budget_used.toFixed(2)}</strong>
         </div>
-
-        {/* Calendar View */}
-        <Card padding="lg">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-xl font-display font-semibold">Meal Calendar</h2>
-            <div className="flex gap-2">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => navigateWeek("prev")}
+        <div>
+          <span>
+            {p.budget - p.weeklyPlan.total_budget_used < 0
+              ? "Over budget"
+              : "Room in your budget"}
+          </span>
+          <strong
+            className={
+              p.budget - p.weeklyPlan.total_budget_used < 0 ? "over-budget" : ""
+            }
+          >
+            ${Math.abs(p.budget - p.weeklyPlan.total_budget_used).toFixed(2)}
+          </strong>
+        </div>
+        <div className="budget-meter">
+          <span
+            style={{
+              width: `${Math.min(100, (p.weeklyPlan.total_budget_used / p.budget) * 100)}%`,
+            }}
+          />
+        </div>
+      </section>
+      <div className="meal-planner-layout">
+        <section className="meal-panel">
+          <div className="meal-section-top">
+            <div>
+              <p className="meal-eyebrow">01 / PLAN</p>
+              <h2>
+                {format(start, "MMMM d")} –{" "}
+                {format(addDays(start, 6), "d, yyyy")}
+              </h2>
+            </div>
+            <div className="week-controls">
+              <button aria-label="Previous week" onClick={() => changeWeek(-7)}>
+                ←
+              </button>
+              <button
+                onClick={() => {
+                  const week = mondayOf(new Date());
+                  p.setWeek(week);
+                  setSelected(week);
+                }}
               >
-                <ChevronLeftIcon className="w-5 h-5" />
-              </Button>
-              <span className="px-4 py-2 font-medium">
-                {format(currentWeekStart, "MMM d")} - {format(addDays(currentWeekStart, 6), "MMM d, yyyy")}
-              </span>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => navigateWeek("next")}
-              >
-                <ChevronRightIcon className="w-5 h-5" />
-              </Button>
+                This week
+              </button>
+              <button aria-label="Next week" onClick={() => changeWeek(7)}>
+                →
+              </button>
             </div>
           </div>
-
-          <div className="grid grid-cols-7 gap-2">
-            {weekDays.map((date) => {
-              const plan = getPlanForDate(date);
-              const isToday = isSameDay(date, new Date());
-              const hasMeals = plan && plan.meals.length > 0;
-
+          <div className="week-grid">
+            {days.map((d) => {
+              const key = dateKey(d),
+                n =
+                  p.weeklyPlan.daily_plans.find((day) => day.date === key)
+                    ?.meals.length ?? 0;
               return (
-                <div
-                  key={date.toISOString()}
-                  className={`
-                    p-3 rounded-2xl text-center transition-all
-                    ${isToday ? "bg-vibrant-orange-500 text-white" : "bg-earth-green-50"}
-                    ${hasMeals ? "ring-2 ring-earth-green-400" : ""}
-                  `}
+                <button
+                  key={key}
+                  className={active === key ? "selected" : ""}
+                  aria-pressed={active === key}
+                  aria-label={`${format(d, "EEEE, MMMM d")}, ${n} meals`}
+                  onClick={() => {
+                    setSelected(key);
+                    setAdding(false);
+                  }}
                 >
-                  <p className={`text-xs font-medium ${isToday ? "text-white" : "text-editorial-gray"}`}>
-                    {format(date, "EEE")}
-                  </p>
-                  <p className={`text-lg font-bold ${isToday ? "text-white" : "text-editorial-black"}`}>
-                    {format(date, "d")}
-                  </p>
-                  {hasMeals && (
-                    <div className="mt-2 flex justify-center gap-1">
-                      {plan.meals.slice(0, 3).map((meal, i) => (
-                        <div
-                          key={i}
-                          className={`w-2 h-2 rounded-full ${
-                            meal.completed ? "bg-earth-green-500" : "bg-vibrant-orange-400"
-                          }`}
-                        />
-                      ))}
-                    </div>
-                  )}
-                </div>
+                  <span>{format(d, "EEE")}</span>
+                  <strong>{format(d, "d")}</strong>
+                  <small>{n ? `${n} meal${n === 1 ? "" : "s"}` : "—"}</small>
+                </button>
               );
             })}
           </div>
-        </Card>
-
-        {/* Shopping List */}
-        <Card padding="lg">
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-3">
-              <ShoppingCartIcon className="w-6 h-6 text-vibrant-orange-500" />
-              <h2 className="text-xl font-display font-semibold">Smart Shopping List</h2>
-            </div>
-            <div className="text-sm text-editorial-gray">
-              {checkedItems} / {shoppingList.items.length} items
-            </div>
+          <div className="meal-section-top day-heading">
+            <h3>{format(new Date(active + "T12:00:00"), "EEEE")}’s menu</h3>
+            <button className="meal-button" onClick={() => setAdding(!adding)}>
+              {adding ? "Close" : "＋ Add a meal"}
+            </button>
           </div>
-
-          {/* Aisle-organized list */}
-          <div className="space-y-4">
-            {["Produce", "Protein", "Grains & Rice", "Canned Goods", "Dairy", "Pantry"].map((aisle) => {
-              const aisleItems = shoppingList.items.filter((item) => item.aisle === aisle);
-              if (aisleItems.length === 0) return null;
-
-              return (
-                <div key={aisle}>
-                  <h3 className="text-sm font-semibold text-editorial-gray uppercase tracking-wide mb-2">
-                    {aisle}
-                  </h3>
-                  <div className="space-y-2">
-                    {aisleItems.map((item) => (
-                      <div
-                        key={item.ingredient_id}
-                        className={`
-                          flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-all
-                          ${item.checked ? "bg-earth-green-100 opacity-60" : "bg-white hover:bg-earth-green-50"}
-                        `}
-                        onClick={() => toggleShoppingItem(item.ingredient_id)}
-                      >
-                        <div className={`
-                          flex-shrink-0 w-6 h-6 rounded-full border-2 flex items-center justify-center
-                          ${item.checked ? "bg-earth-green-500 border-earth-green-500" : "border-earth-green-300"}
-                        `}>
-                          {item.checked && <CheckIcon className="w-4 h-4 text-white" />}
-                        </div>
-                        <div className="flex-1">
-                          <p className={`font-medium ${item.checked ? "line-through text-editorial-gray" : "text-editorial-black"}`}>
-                            {item.item}
-                          </p>
-                          <p className="text-sm text-editorial-gray">{item.amount}</p>
-                        </div>
-                        <p className={`font-semibold ${item.checked ? "text-editorial-gray" : "text-vibrant-orange-500"}`}>
-                          ${item.estimated_price.toFixed(2)}
-                        </p>
-                      </div>
+          {adding && (
+            <form
+              className="add-meal-form"
+              onSubmit={(e) => {
+                e.preventDefault();
+                p.addMealToPlan(recipeId, active, type, servings);
+                setAdding(false);
+                setMessage("Meal added. Your groceries updated automatically.");
+              }}
+            >
+              <label>
+                Recipe
+                <select
+                  value={recipeId}
+                  onChange={(e) => setRecipeId(e.target.value)}
+                >
+                  {recipes.map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {r.title}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div className="form-pair">
+                <label>
+                  Meal
+                  <select
+                    value={type}
+                    onChange={(e) => setType(e.target.value)}
+                  >
+                    {["breakfast", "lunch", "dinner", "snack"].map((t) => (
+                      <option key={t}>{t}</option>
                     ))}
+                  </select>
+                </label>
+                <label>
+                  Servings
+                  <input
+                    type="number"
+                    min="1"
+                    max="12"
+                    required
+                    value={servings}
+                    onChange={(e) => setServings(Number(e.target.value))}
+                  />
+                </label>
+              </div>
+              <button className="meal-button" type="submit">
+                Add to {format(new Date(active + "T12:00:00"), "EEEE")}
+              </button>
+            </form>
+          )}
+          {!meals.length && !adding && (
+            <div className="meal-empty">
+              <span>🍽</span>
+              <h3>Make room for something good.</h3>
+              <p>
+                Add a meal here. We’ll work out the ingredients and portions for
+                you.
+              </p>
+              <button
+                onClick={() => setAdding(true)}
+                className="meal-button secondary"
+              >
+                Plan this day
+              </button>
+            </div>
+          )}
+          <div className="planned-meals">
+            {meals.map((m) => {
+              const r = recipes.find((r) => r.id === m.recipe_id);
+              if (!r) return null;
+              return (
+                <article key={m.id} className="planned-meal">
+                  <Image src={r.image_url} width={84} height={84} alt="" />
+                  <div className="planned-meal-info">
+                    <small>
+                      {m.meal_type} {m.completed ? "· Cooked ✓" : ""}
+                    </small>
+                    <Link href={`/discover/${r.id}`}>
+                      <h3>{r.title}</h3>
+                    </Link>
+                    <p>
+                      ${recipeCost(r, m.servings, m.swaps).toFixed(2)}{" "}
+                      ingredient estimate
+                    </p>
+                    <div className="meal-edit">
+                      <label>
+                        Servings{" "}
+                        <input
+                          aria-label={`Servings for ${r.title}`}
+                          type="number"
+                          min="1"
+                          max="12"
+                          value={m.servings}
+                          onChange={(e) => {
+                            const v = Number(e.target.value);
+                            if (v >= 1 && v <= 12)
+                              p.updateMeal(active, m.id!, { servings: v });
+                          }}
+                        />
+                      </label>
+                      <button
+                        onClick={() =>
+                          p.updateMeal(active, m.id!, {
+                            completed: !m.completed,
+                          })
+                        }
+                      >
+                        {m.completed ? "Mark uncooked" : "Mark cooked"}
+                      </button>
+                      <button
+                        className="remove-meal"
+                        aria-label={`Remove ${r.title}`}
+                        onClick={() => p.removeMeal(active, m.id!)}
+                      >
+                        Remove
+                      </button>
+                    </div>
+                    {r.ingredients.some((i) => i.swap_option) && (
+                      <details>
+                        <summary>
+                          Budget swaps{" "}
+                          {m.swaps?.length
+                            ? `(${m.swaps.length} selected)`
+                            : ""}
+                        </summary>
+                        {r.ingredients
+                          .filter((i) => i.swap_option)
+                          .map((i) => (
+                            <label className="swap-choice" key={i.id}>
+                              <input
+                                type="checkbox"
+                                checked={m.swaps?.includes(i.id) ?? false}
+                                onChange={() =>
+                                  p.updateMeal(active, m.id!, {
+                                    swaps: m.swaps?.includes(i.id)
+                                      ? m.swaps.filter((id) => id !== i.id)
+                                      : [...(m.swaps ?? []), i.id],
+                                  })
+                                }
+                              />
+                              <span>
+                                {i.item} → {i.swap_option!.item}
+                              </span>
+                            </label>
+                          ))}
+                      </details>
+                    )}
                   </div>
-                </div>
+                </article>
               );
             })}
           </div>
-
-          {/* Total & Store Selection */}
-          <div className="mt-6 p-4 bg-earth-green-50 rounded-2xl">
-            <div className="flex items-center justify-between mb-4">
-              <span className="text-editorial-gray">Estimated Total:</span>
-              <span className="text-2xl font-bold text-editorial-black">
-                ${totalEstimatedCost.toFixed(2)}
-              </span>
+          <p className="meal-footnote">
+            {count} meals this week · Each week is saved separately.
+          </p>
+        </section>
+        <aside className="meal-panel grocery-panel">
+          <div className="meal-section-top">
+            <div>
+              <p className="meal-eyebrow">02 / SHOP</p>
+              <h2>Your grocery list</h2>
             </div>
+            <span className="meal-pill">
+              {checked}/{p.shoppingList.items.length}
+            </span>
           </div>
-        </Card>
-
-        {/* Store Finder */}
-        <Card padding="lg">
-          <div className="flex items-center gap-3 mb-6">
-            <MapPinIcon className="w-6 h-6 text-vibrant-orange-500" />
-            <h2 className="text-xl font-display font-semibold">Nearby Stores</h2>
-          </div>
-
-          <div className="space-y-3">
-            {nearbyStores.map((store) => (
-              <div
-                key={store.store_id}
-                className={`
-                  p-4 rounded-2xl border-2 cursor-pointer transition-all
-                  ${selectedStore?.store_id === store.store_id
-                    ? "border-vibrant-orange-500 bg-vibrant-orange-50"
-                    : "border-earth-green-100 bg-white hover:border-earth-green-300"
-                  }
-                `}
-                onClick={() => setSelectedStore(store)}
-              >
-                <div className="flex items-start justify-between">
-                  <div>
-                    <h3 className="font-semibold text-editorial-black">{store.name}</h3>
-                    <p className="text-sm text-editorial-gray">{store.address}</p>
-                    <div className="flex items-center gap-4 mt-2 text-sm">
-                      <span className="flex items-center gap-1">
-                        <MapPinIcon className="w-4 h-4" />
-                        {store.distance_miles} mi
-                      </span>
-                      <span className="text-earth-green-600">
-                        {store.inventory_match_percentage}% match
-                      </span>
-                    </div>
+          <p className="meal-sub small">
+            Built from this week’s meals. Repeated ingredients are combined.
+          </p>
+          {!p.shoppingList.items.length ? (
+            <div className="grocery-empty">
+              Your first meal starts the list.
+            </div>
+          ) : (
+            <>
+              {[...new Set(p.shoppingList.items.map((i) => i.aisle))].map(
+                (aisle) => (
+                  <div key={aisle} className="grocery-aisle">
+                    <h3>{aisle}</h3>
+                    {p.shoppingList.items
+                      .filter((i) => i.aisle === aisle)
+                      .map((i) => (
+                        <label
+                          className={`grocery-row ${i.checked ? "checked" : ""}`}
+                          key={i.ingredient_id}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={i.checked}
+                            onChange={() =>
+                              p.toggleShoppingItem(i.ingredient_id)
+                            }
+                          />
+                          <span>
+                            <strong>{i.item}</strong>
+                            <small>{i.amount}</small>
+                          </span>
+                          <b>${i.estimated_price.toFixed(2)}</b>
+                        </label>
+                      ))}
                   </div>
-                  <div className="text-right">
-                    <p className="text-lg font-bold text-vibrant-orange-500">
-                      ${store.estimated_cart_total.toFixed(2)}
-                    </p>
-                    <p className="text-xs text-editorial-gray">estimated</p>
-                  </div>
-                </div>
-
-                {selectedStore?.store_id === store.store_id && (
-                  <div className="mt-4 pt-4 border-t border-earth-green-100">
-                    <a
-                      href={store.navigation_link}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-2 text-vibrant-orange-500 font-medium hover:underline"
-                    >
-                      <MapPinIcon className="w-4 h-4" />
-                      Get Directions
-                    </a>
-                  </div>
-                )}
+                ),
+              )}
+              <div className="grocery-total">
+                <span>Ingredient estimate</span>
+                <strong>
+                  ${p.shoppingList.total_estimated_cost.toFixed(2)}
+                </strong>
               </div>
-            ))}
-          </div>
-        </Card>
+              <a
+                className="meal-button full"
+                href={`data:text/plain;charset=utf-8,${encodeURIComponent(shoppingText)}`}
+                download={`groceries-${p.weeklyPlan.week_start}.txt`}
+                onClick={() =>
+                  setMessage("Shopping list prepared for download.")
+                }
+              >
+                ↓ Download shopping list
+              </a>
+            </>
+          )}
+          <p className="meal-footnote">
+            Illustrative ingredient costs, not live retailer prices. Package
+            sizes and pantry staples can change your checkout total.
+          </p>
+        </aside>
       </div>
+      <p className="sr-only" role="status">
+        {message}
+      </p>
     </div>
   );
 }
