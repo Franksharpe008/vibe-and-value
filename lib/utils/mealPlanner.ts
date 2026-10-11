@@ -6,17 +6,25 @@ export const mondayOf = (date: Date) => {
   d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
   return dateKey(d);
 };
-export const money = (value: number) => Math.round(value * 100) / 100;
+export const money = (value: number) =>
+  Math.round((value + Number.EPSILON) * 100) / 100;
+export const portionCost = (
+  price: number,
+  servings: number,
+  batchServings: number,
+) => money((price * servings) / batchServings);
 export function recipeCost(recipe: Recipe, servings = 1, swaps: string[] = []) {
   return money(
-    (recipe.ingredients.reduce(
+    recipe.ingredients.reduce(
       (sum, i) =>
         sum +
-        (swaps.includes(i.id) && i.swap_option ? i.swap_option.price : i.price),
+        portionCost(
+          swaps.includes(i.id) && i.swap_option ? i.swap_option.price : i.price,
+          servings,
+          recipe.servings,
+        ),
       0,
-    ) *
-      servings) /
-      recipe.servings,
+    ),
   );
 }
 export function scaleAmount(amount: string, factor: number) {
@@ -96,7 +104,11 @@ export function makeShoppingList(
             price: 0,
             amounts: [],
           };
-        g.price += (alt?.price ?? i.price) * factor;
+        g.price += portionCost(
+          alt?.price ?? i.price,
+          meal.servings,
+          r.servings,
+        );
         g.amounts.push(scaleAmount(alt?.amount ?? i.amount, factor));
         groups.set(k, g);
       }

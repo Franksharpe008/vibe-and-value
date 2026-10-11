@@ -6,7 +6,13 @@
 
 import { use, useEffect, useState } from "react";
 import { useRecipeStore, useUserStore, usePlannerStore } from "@/lib/store";
-import { dateKey, recipeCost, scaleAmount } from "@/lib/utils/mealPlanner";
+import {
+  dateKey,
+  recipeCost,
+  scaleAmount,
+  portionCost,
+  money,
+} from "@/lib/utils/mealPlanner";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import {
@@ -53,13 +59,10 @@ export default function RecipeDetailPage({
     );
   }
 
-  // Calculate savings from swaps
-  const totalSavings = recipe.ingredients.reduce((acc, ingredient) => {
-    if (swappedIngredients.has(ingredient.id) && ingredient.swap_option) {
-      return acc + ingredient.swap_option.savings;
-    }
-    return acc;
-  }, 0);
+  const totalSavings = money(
+    recipeCost(recipe, planServings) -
+      recipeCost(recipe, planServings, [...swappedIngredients]),
+  );
 
   const finalCostPerServing = recipeCost(recipe, 1, [...swappedIngredients]);
 
@@ -326,9 +329,10 @@ export default function RecipeDetailPage({
                     <div className="text-right">
                       <p className="font-bold text-editorial-black">
                         $
-                        {(
-                          (activeItem.price * planServings) /
-                          recipe.servings
+                        {portionCost(
+                          activeItem.price,
+                          planServings,
+                          recipe.servings,
                         ).toFixed(2)}
                       </p>
                       {ingredient.swap_option && (
@@ -353,10 +357,17 @@ export default function RecipeDetailPage({
                             <>
                               <CurrencyDollarIcon className="w-3 h-3" />
                               Save $
-                              {(
-                                (ingredient.swap_option.savings *
-                                  planServings) /
-                                recipe.servings
+                              {money(
+                                portionCost(
+                                  ingredient.price,
+                                  planServings,
+                                  recipe.servings,
+                                ) -
+                                  portionCost(
+                                    ingredient.swap_option.price,
+                                    planServings,
+                                    recipe.servings,
+                                  ),
                               ).toFixed(2)}
                             </>
                           )}
@@ -375,8 +386,7 @@ export default function RecipeDetailPage({
                   Estimated batch reduction:
                 </span>
                 <span className="text-2xl font-bold text-vibrant-orange-600">
-                  $
-                  {((totalSavings * planServings) / recipe.servings).toFixed(2)}
+                  ${totalSavings.toFixed(2)}
                 </span>
               </div>
             </div>
