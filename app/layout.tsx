@@ -25,7 +25,7 @@ export const metadata: Metadata = {
   title: "Vibe & Value · Meal Planning & Grocery Budgets",
   description:
     "Plan meals, adjust portions, compare ingredient estimates and build a grocery list. A working consumer prototype by Frank D. Sharpe.",
-  manifest: "/manifest.json",
+  manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
